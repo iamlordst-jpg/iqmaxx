@@ -1,0 +1,29 @@
+name: IQMaxx iOS Build
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, "build/**"]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Build simulator app
+        run: |
+          xcodebuild -project IQMaxx.xcodeproj -scheme IQMaxx -sdk iphonesimulator -configuration Release -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=NO build
+      - name: Package app bundle
+        run: |
+          mkdir -p artifacts
+          cd build/DerivedData/Build/Products/Release-iphonesimulator
+          zip -r "$GITHUB_WORKSPACE/artifacts/IQMaxx-Simulator-App.zip" IQMaxx.app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: IQMaxx-Simulator-App
+          path: artifacts/IQMaxx-Simulator-App.zip
+          if-no-files-found: error
