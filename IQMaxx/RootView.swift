@@ -464,6 +464,8 @@ private struct ReflexTestView: View {
     @State private var startedAt = Date()
     @State private var scheduledSignal = false
     @State private var trialToken = UUID()
+    @State private var touchActive = false
+    @State private var didSaveResult = false
 
     private let green = Color(red: 0.12, green: 0.82, blue: 0.32)
     private let red = Color(red: 0.78, green: 0.12, blue: 0.12)
@@ -492,20 +494,27 @@ private struct ReflexTestView: View {
                 }
                 .padding(28)
             } else if state == "waiting" || state == "go" {
-                Button(action: tappedScreen) {
-                    VStack(spacing: 18) {
-                        if state == "waiting" {
-                            Text("WAIT").font(.system(size: 18, weight: .bold, design: .monospaced)).tracking(4)
-                            Text("Don't tap yet").font(.system(size: 15)).opacity(0.8)
-                        } else {
-                            Text("TAP NOW").font(.system(size: 28, weight: .bold, design: .monospaced)).tracking(2)
-                        }
+                VStack(spacing: 18) {
+                    if state == "waiting" {
+                        Text("WAIT").font(.system(size: 18, weight: .bold, design: .monospaced)).tracking(4)
+                        Text("Don't tap yet").font(.system(size: 15)).opacity(0.8)
+                    } else {
+                        Text("TAP NOW").font(.system(size: 28, weight: .bold, design: .monospaced)).tracking(2)
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .accessibilityElement()
                 .accessibilityLabel(state == "go" ? "Green signal. Tap now." : "Wait for green signal")
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { _ in
+                            guard !touchActive else { return }
+                            touchActive = true
+                            tappedScreen()
+                        }
+                        .onEnded { _ in touchActive = false }
+                )
             } else if state == "result" {
                 VStack(spacing: 18) {
                     Spacer()
@@ -547,7 +556,7 @@ private struct ReflexTestView: View {
                     }.padding(.top, 8)
                     Spacer()
                     Button("Test again") {
-                        reactionTimes = []; falseStarts = 0; startedAt = .now; state = "intro"
+                        reactionTimes = []; falseStarts = 0; startedAt = .now; didSaveResult = false; state = "intro"
                     }
                     .font(.system(size: 18, weight: .semibold))
                     .frame(maxWidth: .infinity, minHeight: 58)
@@ -556,7 +565,10 @@ private struct ReflexTestView: View {
                     Button("Done") { dismiss() }.foregroundStyle(.secondary)
                 }.padding(28)
                 .onAppear {
-                    progress.add(Module.all[0], score: max(0, 100 - average / 5), seconds: max(1, Int(Date().timeIntervalSince(startedAt))))
+                    if !didSaveResult {
+                        progress.add(Module.all[0], score: max(0, 100 - average / 5), seconds: max(1, Int(Date().timeIntervalSince(startedAt))))
+                        didSaveResult = true
+                    }
                 }
             }
         }
