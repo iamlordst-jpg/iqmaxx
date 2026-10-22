@@ -1,0 +1,20 @@
+name: IQMaxx
+options:
+  bundleIdPrefix: com.st
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    SWIFT_VERSION: 5.0
+    PRODUCT_BUNDLE_IDENTIFIER: com.st.iqmaxx
+    INFOPLIST_KEY_CFBundleDisplayName: IQMaxx
+    GENERATE_INFOPLIST_FILE: YES
+targets:
+  IQMaxx:
+    type: application
+    platform: iOS
+    sources:
+      - path: IQMaxx
+    settings:
+      base:
+        TARGETED_DEVICE_FAMILY: "1,2"
