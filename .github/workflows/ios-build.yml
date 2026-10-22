@@ -1,4 +1,4 @@
-name: IQMaxx iOS Build
+name: IQMaxx iOS IPA Build
 on:
   workflow_dispatch:
   push:
@@ -25,16 +25,21 @@ jobs:
           grep -E 'objectVersion|compatibilityVersion' IQMaxx.xcodeproj/project.pbxproj | head -5
       - name: Show Xcode version
         run: xcodebuild -version
-      - name: Build simulator app
+      - name: Build iPhone device app
         run: |
-          xcodebuild -project IQMaxx.xcodeproj -scheme IQMaxx -sdk iphonesimulator -configuration Release -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=NO build
-      - name: Package app bundle
+          xcodebuild -project IQMaxx.xcodeproj -scheme IQMaxx -sdk iphoneos -configuration Release -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=NO build
+      - name: Package unsigned IPA
         run: |
-          mkdir -p artifacts
-          cd build/DerivedData/Build/Products/Release-iphonesimulator
-          zip -r "$GITHUB_WORKSPACE/artifacts/IQMaxx-Simulator-App.zip" IQMaxx.app
+          set -e
+          APP_PATH="build/DerivedData/Build/Products/Release-iphoneos/IQMaxx.app"
+          test -d "$APP_PATH"
+          mkdir -p artifacts/Payload
+          cp -R "$APP_PATH" artifacts/Payload/IQMaxx.app
+          cd artifacts
+          zip -r IQMaxx-unsigned.ipa Payload
+          unzip -l IQMaxx-unsigned.ipa | head -30
       - uses: actions/upload-artifact@v4
         with:
-          name: IQMaxx-Simulator-App
-          path: artifacts/IQMaxx-Simulator-App.zip
+          name: IQMaxx-unsigned-IPA
+          path: artifacts/IQMaxx-unsigned.ipa
           if-no-files-found: error
