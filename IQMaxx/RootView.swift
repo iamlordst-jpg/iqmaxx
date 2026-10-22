@@ -117,32 +117,87 @@ struct RootView: View {
         .toolbar(.hidden, for: .navigationBar)
     }
     private var library: some View {
-        List(Module.all) { m in
-            Button { chosen = m } label: {
-                HStack(spacing:13) {
-                    Image(systemName:m.symbol).font(.title2).foregroundStyle(m.tint).frame(width:46,height:46).background(m.tint.opacity(0.12),in:RoundedRectangle(cornerRadius:14))
-                    VStack(alignment:.leading,spacing:4) { Text(m.title).foregroundStyle(.white).font(.headline); Text(m.subtitle).foregroundStyle(Theme.muted).font(.subheadline) }
-                    Spacer(); Image(systemName:"chevron.right").foregroundStyle(Theme.muted)
-                }.padding(.vertical,5)
-            }.listRowBackground(Theme.panel)
-        }.scrollContentBackground(.hidden).background(Theme.bg).navigationTitle("Training")
-    }
-    private var stats: some View {
-        ScrollView {
-            VStack(alignment:.leading,spacing:16) {
-                Text("Progress").font(.largeTitle.bold())
-                HStack { metric("\(progress.records.count)","TOTAL SESSIONS","chart.bar.fill"); metric("\(progress.minutes)m","TOTAL TIME","clock") }
-                Text("RECENT SESSIONS").font(.caption.bold()).tracking(1.3).padding(.top,8)
-                if progress.records.isEmpty { Text("Completed sessions will appear here.").foregroundStyle(Theme.muted).padding().frame(maxWidth:.infinity,alignment:.leading).background(Theme.panel,in:RoundedRectangle(cornerRadius:16)) }
-                ForEach(progress.records.reversed().prefix(20)) { r in
-                    HStack {
-                        VStack(alignment:.leading,spacing:4) { Text(r.title).font(.headline); Text(r.date.formatted(date:.abbreviated,time:.shortened)).font(.caption).foregroundStyle(Theme.muted) }
-                        Spacer(); Text("\(r.score)%").font(.headline.monospacedDigit()).foregroundStyle(Theme.cyan)
-                    }.padding(14).background(Theme.panel,in:RoundedRectangle(cornerRadius:15))
+        List {
+            Section {
+                ForEach(Module.all) { module in
+                    Button { chosen = module } label: {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(module.title).font(.body).foregroundStyle(.white)
+                                Text(module.subtitle).font(.caption).foregroundStyle(Theme.muted)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right").font(.caption).foregroundStyle(Theme.muted)
+                        }
+                        .padding(.vertical, 5)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .listRowBackground(Theme.bg)
                 }
-                Text("Compare scores within the same exercise. Results vary with sleep, alertness and device conditions.").font(.caption).foregroundStyle(Theme.muted)
-            }.padding(20)
-        }.background(Theme.bg).toolbar(.hidden,for:.navigationBar)
+            } header: {
+                Text("TRAINING").foregroundStyle(Theme.muted)
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(Theme.bg)
+        .navigationTitle("Train")
+        .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private var stats: some View {
+        List {
+            Section {
+                HStack {
+                    Text("Sessions")
+                    Spacer()
+                    Text("\(progress.records.count)").monospacedDigit().foregroundStyle(Theme.cyan)
+                }
+                HStack {
+                    Text("Time trained")
+                    Spacer()
+                    Text("\(progress.minutes) min").monospacedDigit().foregroundStyle(Theme.cyan)
+                }
+                HStack {
+                    Text("Today")
+                    Spacer()
+                    Text("\(progress.today)").monospacedDigit().foregroundStyle(Theme.cyan)
+                }
+            } header: {
+                Text("OVERVIEW").foregroundStyle(Theme.muted)
+            }
+
+            Section {
+                if progress.records.isEmpty {
+                    Text("Finish a training session to see it here.")
+                        .foregroundStyle(Theme.muted)
+                } else {
+                    ForEach(progress.records.reversed().prefix(30)) { record in
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(record.title).foregroundStyle(.white)
+                                Text(record.date.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.caption).foregroundStyle(Theme.muted)
+                            }
+                            Spacer()
+                            Text("\(record.score)%")
+                                .font(.body.monospacedDigit())
+                                .foregroundStyle(Theme.cyan)
+                        }
+                        .padding(.vertical, 4)
+                        .listRowBackground(Theme.bg)
+                    }
+                }
+            } header: {
+                Text("SESSIONS").foregroundStyle(Theme.muted)
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(Theme.bg)
+        .navigationTitle("Progress")
+        .toolbar(.hidden, for: .navigationBar)
     }
     private func metric(_ value:String,_ label:String,_ icon:String) -> some View {
         VStack(alignment:.leading,spacing:9) {
@@ -155,7 +210,7 @@ struct RootView: View {
 struct ExerciseView: View {
     let module: Module
     @ObservedObject var progress: Progress
-    @Environment(\\.dismiss) private var dismiss
+    @Environment(\.dismiss) private var dismiss
     @State private var startedAt = Date()
     @State private var round = 1
     @State private var completed = 0
@@ -228,7 +283,7 @@ struct ExerciseView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("ROUND \\(min(round, 10))").font(.caption.monospaced()).foregroundStyle(Theme.muted)
+            Text("ROUND \(min(round, 10))").font(.caption.monospaced()).foregroundStyle(Theme.muted)
             ProgressView(value: Double(min(round - 1, 10)), total: 10).tint(Theme.cyan)
         }
     }
@@ -252,8 +307,8 @@ struct ExerciseView: View {
                     .font(.system(size: 32, weight: .medium, design: .monospaced))
                     .frame(maxWidth: .infinity).padding(.vertical, 20)
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 10) {
-                    ForEach(1...9, id: \\.self) { n in
-                        Button("\\(n)") {
+                    ForEach(1...9, id: \.self) { n in
+                        Button("\(n)") {
                             guard answer.count < sequence.count else { return }
                             answer.append(n)
                         }
@@ -285,11 +340,11 @@ struct ExerciseView: View {
                 .font(.subheadline).foregroundStyle(Theme.muted)
             HStack {
                 Text("FIND").font(.caption.bold()).tracking(2).foregroundStyle(Theme.muted)
-                Text("\\(target)").font(.system(size: 32, weight: .semibold, design: .rounded))
+                Text("\(target)").font(.system(size: 32, weight: .semibold, design: .rounded))
             }
             LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 12) {
-                ForEach(Array(grid.enumerated()), id: \\.offset) { index, value in
-                    Button("\\(value)") {
+                ForEach(Array(grid.enumerated()), id: \.offset) { index, value in
+                    Button("\(value)") {
                         guard !grid.isEmpty else { return }
                         if value == target {
                             correctCount += 1
@@ -337,8 +392,8 @@ struct ExerciseView: View {
             } else {
                 Text("How vivid and controllable was the image?").font(.headline)
                 HStack {
-                    ForEach(1...5, id: \\.self) { n in
-                        Button("\\(n)") { rating = n }
+                    ForEach(1...5, id: \.self) { n in
+                        Button("\(n)") { rating = n }
                             .frame(maxWidth: .infinity, minHeight: 48)
                             .background(rating == n ? Theme.violet.opacity(0.5) : Theme.panel, in: RoundedRectangle(cornerRadius: 10))
                     }
@@ -361,7 +416,7 @@ struct ExerciseView: View {
             Text("Choose the direction after one clockwise quarter-turn.")
                 .font(.caption).foregroundStyle(Theme.muted)
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                ForEach(0..<4, id: \\.self) { choice in
+                ForEach(0..<4, id: \.self) { choice in
                     Button(["↑", "→", "↓", "←"][choice]) {
                         spatialChoice = choice
                         record(choice == (shapeRotation + 1) % 4)
@@ -409,8 +464,8 @@ struct ExerciseView: View {
         VStack(spacing: 18) {
             Spacer()
             Text("SESSION COMPLETE").font(.caption.monospaced()).tracking(2).foregroundStyle(Theme.muted)
-            Text("\\(score)%").font(.system(size: 64, weight: .medium, design: .rounded).monospacedDigit())
-            Text("\\(correctCount) correct out of \\(max(completed, 1))").foregroundStyle(Theme.muted)
+            Text("\(score)%").font(.system(size: 64, weight: .medium, design: .rounded).monospacedDigit())
+            Text("\(correctCount) correct out of \(max(completed, 1))").foregroundStyle(Theme.muted)
             Button("Done") { dismiss() }.buttonStyle(PrimaryStyle())
             Spacer()
         }.padding(26)
