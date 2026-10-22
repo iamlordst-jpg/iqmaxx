@@ -54,7 +54,13 @@ struct RootView: View {
             NavigationStack { library }.tabItem { Label("Train",systemImage:"flame.fill") }.tag(1)
             NavigationStack { stats }.tabItem { Label("Progress",systemImage:"chart.xyaxis.line") }.tag(2)
         }.tint(Theme.cyan)
-        .sheet(item:$chosen) { ExerciseView(module:$0,progress:progress) }
+        .fullScreenCover(item:$chosen) { module in
+            if module.id == "reflex" {
+                ReflexTestView(progress: progress)
+            } else {
+                ExerciseView(module: module, progress: progress)
+            }
+        }
     }
     private var home: some View {
         ScrollView {
@@ -267,6 +273,160 @@ struct ExerciseView: View {
         progress.add(module,score:score,seconds:max(1,Int(Date().timeIntervalSince(start))))
     }
 }
+private struct ReflexTestView: View {
+    @ObservedObject var progress: Progress
+    @Environment(\\.dismiss) private var dismiss
+    @State private var state = "intro"
+    @State private var signalTime: UInt64 = 0
+    @State private var reactionTimes: [Double] = []
+    @State private var falseStarts = 0
+    @State private var resultMs: Int?
+    @State private var startedAt = Date()
+    @State private var scheduledSignal = false
+    @State private var trialToken = UUID()
+
+    private let green = Color(red: 0.12, green: 0.82, blue: 0.32)
+    private let red = Color(red: 0.78, green: 0.12, blue: 0.12)
+    private var average: Int {
+        guard !reactionTimes.isEmpty else { return 0 }
+        return Int((reactionTimes.reduce(0, +) / Double(reactionTimes.count)).rounded())
+    }
+    private var best: Int { Int((reactionTimes.min() ?? 0).rounded()) }
+
+    var body: some View {
+        ZStack {
+            background.ignoresSafeArea()
+            if state == "intro" {
+                VStack(spacing: 18) {
+                    Spacer()
+                    Text("REACTION TIME").font(.system(size: 13, weight: .semibold, design: .monospaced)).tracking(3).foregroundStyle(.secondary)
+                    Text("Tap when green.").font(.system(size: 30, weight: .semibold))
+                    Text("Five rounds · no animations · milliseconds").font(.system(size: 14)).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Start test") { startTrial() }
+                        .font(.system(size: 18, weight: .semibold))
+                        .frame(maxWidth: .infinity, minHeight: 58)
+                        .background(.white, in: RoundedRectangle(cornerRadius: 14))
+                        .foregroundStyle(.black)
+                    Button("Close") { dismiss() }.foregroundStyle(.secondary).padding(.top, 4)
+                }
+                .padding(28)
+            } else if state == "waiting" || state == "go" {
+                Button(action: tappedScreen) {
+                    VStack(spacing: 18) {
+                        if state == "waiting" {
+                            Text("WAIT").font(.system(size: 18, weight: .bold, design: .monospaced)).tracking(4)
+                            Text("Don't tap yet").font(.system(size: 15)).opacity(0.8)
+                        } else {
+                            Text("TAP NOW").font(.system(size: 28, weight: .bold, design: .monospaced)).tracking(2)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(state == "go" ? "Green signal. Tap now." : "Wait for green signal")
+            } else if state == "result" {
+                VStack(spacing: 18) {
+                    Spacer()
+                    Text("\\(resultMs ?? 0)").font(.system(size: 76, weight: .medium, design: .rounded).monospacedDigit())
+                    Text("milliseconds").font(.system(size: 16)).foregroundStyle(.secondary)
+                    Text(reactionTimes.count < 5 ? "Round \\(reactionTimes.count) of 5 complete" : "Test complete")
+                        .font(.system(size: 15)).foregroundStyle(.secondary)
+                    Spacer()
+                    Button(reactionTimes.count < 5 ? "Next round" : "View results") {
+                        if reactionTimes.count < 5 { startTrial() } else { state = "summary" }
+                    }
+                    .font(.system(size: 18, weight: .semibold))
+                    .frame(maxWidth: .infinity, minHeight: 58)
+                    .background(.white, in: RoundedRectangle(cornerRadius: 14))
+                    .foregroundStyle(.black)
+                }.padding(28)
+            } else if state == "early" {
+                VStack(spacing: 18) {
+                    Spacer()
+                    Text("Too soon").font(.system(size: 34, weight: .semibold))
+                    Text("Wait for the green screen, then tap anywhere.")
+                        .font(.system(size: 15)).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    Spacer()
+                    Button("Try this round again") { startTrial() }
+                        .font(.system(size: 18, weight: .semibold))
+                        .frame(maxWidth: .infinity, minHeight: 58)
+                        .background(.white, in: RoundedRectangle(cornerRadius: 14))
+                        .foregroundStyle(.black)
+                }.padding(28)
+            } else {
+                VStack(spacing: 18) {
+                    Spacer()
+                    Text("RESULT").font(.system(size: 13, weight: .semibold, design: .monospaced)).tracking(3).foregroundStyle(.secondary)
+                    Text("\\(average) ms").font(.system(size: 60, weight: .medium, design: .rounded).monospacedDigit())
+                    Text("Average reaction time").foregroundStyle(.secondary)
+                    HStack(spacing: 32) {
+                        VStack(spacing: 5) { Text("\\(best) ms").font(.title2.monospacedDigit()); Text("Best").font(.caption).foregroundStyle(.secondary) }
+                        VStack(spacing: 5) { Text("\\(falseStarts)").font(.title2.monospacedDigit()); Text("False starts").font(.caption).foregroundStyle(.secondary) }
+                    }.padding(.top, 8)
+                    Spacer()
+                    Button("Test again") {
+                        reactionTimes = []; falseStarts = 0; startedAt = .now; state = "intro"
+                    }
+                    .font(.system(size: 18, weight: .semibold))
+                    .frame(maxWidth: .infinity, minHeight: 58)
+                    .background(.white, in: RoundedRectangle(cornerRadius: 14))
+                    .foregroundStyle(.black)
+                    Button("Done") { dismiss() }.foregroundStyle(.secondary)
+                }.padding(28)
+                .onAppear {
+                    progress.add(Module.all[0], score: max(0, 100 - average / 5), seconds: max(1, Int(Date().timeIntervalSince(startedAt))))
+                }
+            }
+        }
+        .foregroundStyle(state == "go" ? .black : .white)
+        .statusBarHidden(true)
+        .persistentSystemOverlays(.hidden)
+        .preferredColorScheme(.dark)
+        .transaction { $0.animation = nil }
+    }
+
+    private var background: Color {
+        switch state {
+        case "waiting": return Color(red: 0.10, green: 0.10, blue: 0.11)
+        case "go": return green
+        case "early": return red
+        default: return Color.black
+        }
+    }
+
+    private func startTrial() {
+        trialToken = UUID()
+        let token = trialToken
+        state = "waiting"
+        resultMs = nil
+        scheduledSignal = true
+        let delay = Double.random(in: 1.5...4.0)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            guard scheduledSignal, token == trialToken, state == "waiting" else { return }
+            signalTime = DispatchTime.now().uptimeNanoseconds
+            state = "go"
+        }
+    }
+
+    private func tappedScreen() {
+        if state == "waiting" {
+            scheduledSignal = false
+            trialToken = UUID()
+            falseStarts += 1
+            state = "early"
+        } else if state == "go" {
+            let now = DispatchTime.now().uptimeNanoseconds
+            let elapsedMs = Double(now &- signalTime) / 1_000_000
+            resultMs = Int(elapsedMs.rounded())
+            reactionTimes.append(elapsedMs)
+            scheduledSignal = false
+            state = "result"
+        }
+    }
+}
+
 private struct PrimaryStyle: ButtonStyle {
     func makeBody(configuration:Configuration) -> some View {
         configuration.label.font(.headline).foregroundStyle(.black).frame(maxWidth:.infinity,minHeight:52).background(Theme.cyan,in:RoundedRectangle(cornerRadius:16)).opacity(configuration.isPressed ? 0.82:1)
