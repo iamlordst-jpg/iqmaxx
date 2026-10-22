@@ -63,50 +63,58 @@ struct RootView: View {
         }
     }
     private var home: some View {
-        ScrollView {
-            VStack(alignment:.leading,spacing:22) {
-                HStack {
-                    VStack(alignment:.leading,spacing:5) {
-                        Text("IQMAXX").font(.caption.bold()).tracking(3).foregroundStyle(Theme.cyan)
-                        Text("Train your mind.").font(.system(size:30,weight:.bold,design:.rounded))
-                        Text("Reflexes, imagery and cognitive skills.").font(.subheadline).foregroundStyle(Theme.muted)
-                    }
-                    Spacer()
-                    Image(systemName:"brain.head.profile").font(.system(size:28)).foregroundStyle(Theme.violet).frame(width:58,height:58).background(Theme.panel,in:RoundedRectangle(cornerRadius:18))
-                }
-                HStack(spacing:12) {
-                    metric("\(progress.today)","SESSIONS TODAY","checkmark.circle")
-                    metric("\(progress.minutes)","MINUTES TRAINED","clock")
-                }
+        List {
+            Section {
                 Button { chosen = Module.all[0] } label: {
-                    HStack(spacing:15) {
-                        Image(systemName:"play.fill").font(.title2).foregroundStyle(Theme.cyan).frame(width:54,height:54).background(Theme.cyan.opacity(0.12),in:Circle())
-                        VStack(alignment:.leading,spacing:5) {
-                            Text("DAILY STARTER").font(.caption2.bold()).tracking(1.3).foregroundStyle(Theme.cyan)
-                            Text("Start a quick session").font(.title3.bold()).foregroundStyle(.white)
-                            Text("Begin with a reaction test").font(.caption).foregroundStyle(Theme.muted)
-                        }
+                    HStack {
+                        Text("Reaction time").font(.body)
                         Spacer()
-                        Image(systemName:"arrow.up.right").foregroundStyle(.white.opacity(0.7))
-                    }.padding(17).background(Theme.panel,in:RoundedRectangle(cornerRadius:23)).overlay(RoundedRectangle(cornerRadius:23).stroke(Theme.cyan.opacity(0.25),lineWidth:1))
-                }.buttonStyle(.plain)
-                HStack { Text("TRAINING SYSTEMS").font(.caption.bold()).tracking(1.4); Spacer(); Text("8 MODULES").font(.system(size:9,weight:.bold)).foregroundStyle(Theme.muted) }
-                LazyVGrid(columns:[GridItem(.flexible()),GridItem(.flexible())],spacing:12) {
-                    ForEach(Module.all) { module in
-                        Button { chosen = module } label: {
-                            VStack(alignment:.leading,spacing:12) {
-                                Image(systemName:module.symbol).font(.title2).foregroundStyle(module.tint).frame(width:42,height:42).background(module.tint.opacity(0.12),in:RoundedRectangle(cornerRadius:13))
-                                Text(module.title).font(.headline).foregroundStyle(.white)
-                                Text(module.subtitle).font(.caption).foregroundStyle(Theme.muted).frame(maxWidth:.infinity,alignment:.leading).lineLimit(2)
-                                Spacer(minLength:0)
-                                Text("OPEN LAB ↗").font(.system(size:9,weight:.bold)).tracking(1).foregroundStyle(module.tint)
-                            }.frame(maxWidth:.infinity,minHeight:137,alignment:.leading).padding(15).background(Theme.panel,in:RoundedRectangle(cornerRadius:19)).overlay(RoundedRectangle(cornerRadius:19).stroke(module.tint.opacity(0.15),lineWidth:1))
-                        }.buttonStyle(.plain)
+                        Image(systemName: "arrow.up.right").foregroundStyle(.secondary)
                     }
+                    .padding(.vertical, 8)
                 }
-                Text("Practice scores are not clinical measurements or validated IQ scores.").font(.caption2).foregroundStyle(Theme.muted)
-            }.padding(20)
-        }.background(Theme.bg.ignoresSafeArea()).toolbar(.hidden,for:.navigationBar)
+                .buttonStyle(.plain)
+            } header: {
+                Text("QUICK START")
+            }
+
+            Section {
+                ForEach(Module.all) { module in
+                    Button { chosen = module } label: {
+                        HStack(spacing: 12) {
+                            Text(module.title).foregroundStyle(.primary)
+                            Spacer()
+                            Text(module.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+                        }
+                        .padding(.vertical, 5)
+                    }
+                    .buttonStyle(.plain)
+                }
+            } header: {
+                Text("TRAINING")
+            }
+
+            Section {
+                HStack {
+                    Text("Today")
+                    Spacer()
+                    Text("\(progress.today) sessions").foregroundStyle(.secondary)
+                }
+                HStack {
+                    Text("Total time")
+                    Spacer()
+                    Text("\(progress.minutes) min").foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("PROGRESS")
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(Color(.systemBackground))
+        .navigationTitle("IQMaxx")
+        .toolbar(.hidden, for: .navigationBar)
     }
     private var library: some View {
         List(Module.all) { m in
