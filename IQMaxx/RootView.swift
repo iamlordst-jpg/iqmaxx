@@ -155,132 +155,304 @@ struct RootView: View {
 struct ExerciseView: View {
     let module: Module
     @ObservedObject var progress: Progress
-    @Environment(\.dismiss) private var dismiss
-    @State private var start = Date()
-    @State private var waiting = false
-    @State private var lit = false
-    @State private var signalAt = Date()
-    @State private var taps = [Double]()
-    @State private var message = "Start when ready."
-    @State private var phase = 0
+    @Environment(\\.dismiss) private var dismiss
+    @State private var startedAt = Date()
+    @State private var round = 1
+    @State private var completed = 0
+    @State private var correctCount = 0
+    @State private var finished = false
     @State private var sequence = [Int]()
     @State private var answer = [Int]()
-    @State private var target = Int.random(in:1...9)
-    @State private var rating = 3
+    @State private var sequenceHidden = false
+    @State private var target = Int.random(in: 1...9)
+    @State private var grid = [Int]()
+    @State private var message = ""
     @State private var input = ""
-    @State private var finished = false
+    @State private var questionIndex = 0
+    @State private var rating = 3
+    @State private var imageryStep = 0
+    @State private var shapeRotation = Int.random(in: 0...3)
+    @State private var spatialChoice: Int?
     @State private var score = 0
+
+    private let questionSet: [(String, String)] = [
+        ("What comes next?  2, 4, 8, 16, ?", "32"),
+        ("What comes next?  3, 6, 9, 12, ?", "15"),
+        ("What comes next?  1, 1, 2, 3, 5, ?", "8"),
+        ("What comes next?  10, 8, 6, 4, ?", "2"),
+        ("What comes next?  5, 10, 20, 40, ?", "80")
+    ]
+    private let mathSet: [(String, String)] = [
+        ("17 + 28", "45"), ("64 - 27", "37"), ("8 × 7", "56"), ("81 ÷ 9", "9"), ("36 + 47", "83")
+    ]
+    private var questions: [(String, String)] { module.id == "pattern" ? questionSet : mathSet }
+    private var isSearch: Bool { module.id == "search" || module.id == "focus" }
+
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment:.leading,spacing:20) {
-                    HStack { Image(systemName:module.symbol).font(.title).foregroundStyle(module.tint); VStack(alignment:.leading) { Text(module.title).font(.title2.bold()); Text(module.subtitle).foregroundStyle(Theme.muted).font(.subheadline) } }
-                    if finished {
-                        Image(systemName:"checkmark.seal.fill").font(.system(size:46)).foregroundStyle(Theme.cyan)
-                        Text("Session complete").font(.title.bold())
-                        Text("Score: \(score)% · saved to your local history").foregroundStyle(Theme.muted)
-                        Button("Done") { dismiss() }.buttonStyle(PrimaryStyle())
-                    } else if module.id == "reflex" { reflex }
-                    else if module.id == "memory" { memory }
-                    else if module.id == "focus" || module.id == "search" { focus }
-                    else if module.id == "visual" || module.id == "spatial" { imagery }
-                    else { reasoning }
-                }.padding(22)
-            }.background(Theme.bg.ignoresSafeArea()).toolbar { ToolbarItem(placement:.topBarTrailing) { Button("Close") { dismiss() }.foregroundStyle(Theme.cyan) } }
-        }.onAppear { start = .now }
-    }
-    private var reflex: some View {
-        VStack(alignment:.leading,spacing:16) {
-            Text("Wait for cyan, then tap. Early taps are false starts.").foregroundStyle(Theme.muted)
-            Text("TRIAL \(min(taps.count+1,5)) / 5").font(.caption.bold()).tracking(1.4).foregroundStyle(Theme.cyan)
-            Button { tapSignal() } label: {
-                VStack(spacing:14) {
-                    Circle().fill(lit ? Theme.cyan : Color.white.opacity(0.12)).frame(width:100,height:100).overlay(Circle().stroke(lit ? Theme.cyan : .white.opacity(0.2),lineWidth:2)).shadow(color:lit ? Theme.cyan.opacity(0.5):.clear,radius:22)
-                    Text(lit ? "TAP NOW" : "WAIT").font(.headline.bold()).tracking(2)
-                }.foregroundStyle(lit ? Theme.cyan : .white).frame(maxWidth:.infinity).frame(height:230).background(Theme.panel,in:RoundedRectangle(cornerRadius:24))
-            }.buttonStyle(.plain)
-            Text(message).foregroundStyle(Theme.muted)
-            if !taps.isEmpty { Text("Average: \(Int(taps.reduce(0,+)/Double(taps.count)*1000)) ms").font(.subheadline.monospacedDigit()) }
-            Button(phase == 0 ? "Start test" : (taps.count >= 5 ? "Save results" : "Next trial")) {
-                if phase == 0 || taps.count < 5 { beginTrial() }
-                else { finish(score:max(0,min(100,100-Int(taps.reduce(0,+)/Double(taps.count)*100)))) }
-            }.buttonStyle(PrimaryStyle())
+            Group {
+                if finished {
+                    resultView
+                } else if module.id == "memory" {
+                    memoryView
+                } else if isSearch {
+                    searchView
+                } else if module.id == "visual" {
+                    visualizationView
+                } else if module.id == "spatial" {
+                    spatialView
+                } else {
+                    reasoningView
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(Theme.bg.ignoresSafeArea())
+            .foregroundStyle(.white)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text(module.title).font(.headline)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Close") { dismiss() }.foregroundStyle(Theme.cyan)
+                }
+            }
+            .toolbarBackground(Theme.bg, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+        }
+        .preferredColorScheme(.dark)
+        .onAppear {
+            startedAt = .now
+            resetRound()
         }
     }
-    private func beginTrial() {
-        phase = 1; lit = false; waiting = true; message = "Stay ready…"
-        DispatchQueue.main.asyncAfter(deadline:.now()+Double.random(in:1.4...3.5)) {
-            guard !finished, waiting else { return }
-            signalAt = .now; lit = true; message = "Signal!"
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("ROUND \\(min(round, 10))").font(.caption.monospaced()).foregroundStyle(Theme.muted)
+            ProgressView(value: Double(min(round - 1, 10)), total: 10).tint(Theme.cyan)
         }
     }
-    private func tapSignal() {
-        guard phase > 0 else { message = "Press Start test first."; return }
-        if lit { taps.append(Date().timeIntervalSince(signalAt)); lit = false; waiting = false; message = "Recorded. Prepare for the next trial." }
-        else { message = "False start or no active signal — wait for cyan."; waiting = false }
-    }
-    private var memory: some View {
-        VStack(alignment:.leading,spacing:16) {
-            Text("Memorize the sequence, hide it, then repeat it in order.").foregroundStyle(Theme.muted)
-            if sequence.isEmpty {
-                Button("Generate sequence") { sequence = (0..<4).map { _ in Int.random(in:1...9) } }.buttonStyle(PrimaryStyle())
+
+    private var memoryView: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            header
+            Text("Remember the digits in order. Tap Hide when you're ready to recall them.")
+                .font(.subheadline).foregroundStyle(Theme.muted)
+            Spacer(minLength: 8)
+            if !sequenceHidden {
+                Text(sequence.map(String.init).joined(separator: "   "))
+                    .font(.system(size: 38, weight: .medium, design: .monospaced))
+                    .frame(maxWidth: .infinity).padding(.vertical, 34)
+                Button("Hide sequence") {
+                    sequenceHidden = true
+                    answer = []
+                }.buttonStyle(PrimaryStyle())
             } else {
-                Text(sequence.map(String.init).joined(separator:"   ")).font(.system(size:30,weight:.bold,design:.rounded)).foregroundStyle(Theme.cyan).frame(maxWidth:.infinity).padding(24).background(Theme.panel,in:RoundedRectangle(cornerRadius:18))
-                Button("Hide sequence") { phase = 1 }.buttonStyle(PrimaryStyle()).disabled(phase == 1)
-                if phase == 1 {
-                    LazyVGrid(columns:Array(repeating:GridItem(.flexible()),count:3),spacing:10) {
-                        ForEach(1...9,id:\.self) { n in Button("\(n)") { if answer.count < sequence.count { answer.append(n) } }.font(.title2.bold()).frame(maxWidth:.infinity,minHeight:56).background(Theme.panel,in:RoundedRectangle(cornerRadius:13)) }
+                Text(answer.isEmpty ? "Enter the sequence" : answer.map(String.init).joined(separator: "   "))
+                    .font(.system(size: 32, weight: .medium, design: .monospaced))
+                    .frame(maxWidth: .infinity).padding(.vertical, 20)
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 10) {
+                    ForEach(1...9, id: \\.self) { n in
+                        Button("\\(n)") {
+                            guard answer.count < sequence.count else { return }
+                            answer.append(n)
+                        }
+                        .font(.title2.monospacedDigit())
+                        .frame(maxWidth: .infinity, minHeight: 58)
+                        .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12))
                     }
-                    Text("Your answer: "+answer.map(String.init).joined(separator:" · ")).foregroundStyle(Theme.muted)
-                    Button("Check answer") { let correct = answer == sequence; finish(score:correct ? 100 : Int(Double(zip(answer,sequence).filter { pair in pair.0 == pair.1 }.count)/Double(sequence.count)*100)) }.buttonStyle(PrimaryStyle()).disabled(answer.count != sequence.count)
+                    Button("⌫") { if !answer.isEmpty { answer.removeLast() } }
+                        .frame(maxWidth: .infinity, minHeight: 58)
+                        .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12))
+                    Button("Clear") { answer = [] }
+                        .frame(maxWidth: .infinity, minHeight: 58)
+                        .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12))
+                }
+                Button("Check answer") {
+                    record(answer == sequence)
+                }.buttonStyle(PrimaryStyle()).disabled(answer.count != sequence.count)
+            }
+            Spacer(minLength: 8)
+            if !message.isEmpty { Text(message).font(.subheadline).foregroundStyle(Theme.muted) }
+            Button("Finish session") { finishSession() }.foregroundStyle(Theme.muted).frame(maxWidth: .infinity)
+        }.padding(22)
+    }
+
+    private var searchView: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            header
+            Text("Find the target number as quickly as you can. Each number appears once.")
+                .font(.subheadline).foregroundStyle(Theme.muted)
+            HStack {
+                Text("FIND").font(.caption.bold()).tracking(2).foregroundStyle(Theme.muted)
+                Text("\\(target)").font(.system(size: 32, weight: .semibold, design: .rounded))
+            }
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 12) {
+                ForEach(Array(grid.enumerated()), id: \\.offset) { index, value in
+                    Button("\\(value)") {
+                        guard !grid.isEmpty else { return }
+                        if value == target {
+                            correctCount += 1
+                            completed += 1
+                            message = "Correct."
+                            grid = []
+                        } else {
+                            message = "Not that one. Try again."
+                        }
+                    }
+                    .font(.system(size: 29, weight: .medium, design: .rounded))
+                    .frame(maxWidth: .infinity, minHeight: 78)
+                    .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12))
+                    .disabled(grid.isEmpty)
                 }
             }
-        }
+            if !message.isEmpty { Text(message).font(.subheadline).foregroundStyle(Theme.muted) }
+            if grid.isEmpty {
+                Button(completed >= 10 ? "View results" : "Next round") {
+                    if completed >= 10 { finishSession() } else { round = completed + 1; resetRound() }
+                }.buttonStyle(PrimaryStyle())
+            }
+            Spacer()
+            Button("Finish session") { finishSession() }.foregroundStyle(Theme.muted).frame(maxWidth: .infinity)
+        }.padding(22)
     }
-    private var focus: some View {
-        VStack(alignment:.leading,spacing:16) {
-            Text("Find the target number. Reset your attention after each attempt.").foregroundStyle(Theme.muted)
-            Text("FIND  \(target)").font(.caption.bold()).tracking(2).foregroundStyle(module.tint)
-            LazyVGrid(columns:Array(repeating:GridItem(.flexible()),count:3),spacing:12) {
-                ForEach(0..<9,id:\.self) { i in
-                    let value = i == target-1 ? target : ((i+target)%9)+1
-                    Button("\(value)") { if value == target { finish(score:100) } else { message = "Not that one — look again." } }
-                        .font(.system(size:28,weight:.bold,design:.rounded)).frame(maxWidth:.infinity,minHeight:74).background(Theme.panel,in:RoundedRectangle(cornerRadius:16))
+
+    private var visualizationView: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            Text("Guided visualization").font(.title2.weight(.semibold))
+            Text("Build a scene in your mind. There is no picture to rotate—you're training the ability to create and control mental imagery.")
+                .font(.subheadline).foregroundStyle(Theme.muted)
+            Text(["1 · Place", "2 · Detail", "3 · Movement", "4 · Change perspective"][imageryStep])
+                .font(.system(size: 26, weight: .medium))
+            Text([
+                "Imagine a familiar room. Picture where the door, window and furniture are.",
+                "Add three details: the light, the colors, and one small object. Try to see each clearly.",
+                "Imagine walking slowly across the room. Notice how nearby objects move relative to distant ones.",
+                "Imagine viewing the room from the doorway, then from above. Keep the layout consistent."
+            ][imageryStep])
+            .font(.body).lineSpacing(6).foregroundStyle(Theme.muted)
+            Spacer()
+            if imageryStep < 3 {
+                Button("Next step") { imageryStep += 1 }.buttonStyle(PrimaryStyle())
+            } else {
+                Text("How vivid and controllable was the image?").font(.headline)
+                HStack {
+                    ForEach(1...5, id: \\.self) { n in
+                        Button("\\(n)") { rating = n }
+                            .frame(maxWidth: .infinity, minHeight: 48)
+                            .background(rating == n ? Theme.violet.opacity(0.5) : Theme.panel, in: RoundedRectangle(cornerRadius: 10))
+                    }
+                }
+                Button("Save session") { score = rating * 20; finishSession() }.buttonStyle(PrimaryStyle())
+            }
+            Button("Finish session") { finishSession() }.foregroundStyle(Theme.muted).frame(maxWidth: .infinity)
+        }.padding(22)
+    }
+
+    private var spatialView: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            header
+            Text("Mental rotation").font(.title2.weight(.semibold))
+            Text("Imagine turning this arrow clockwise by 90°. Which direction will it point?")
+                .font(.subheadline).foregroundStyle(Theme.muted)
+            Text(["↑", "→", "↓", "←"][shapeRotation])
+                .font(.system(size: 100, weight: .light))
+                .frame(maxWidth: .infinity).padding(28)
+            Text("Choose the direction after one clockwise quarter-turn.")
+                .font(.caption).foregroundStyle(Theme.muted)
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                ForEach(0..<4, id: \\.self) { choice in
+                    Button(["↑", "→", "↓", "←"][choice]) {
+                        spatialChoice = choice
+                        record(choice == (shapeRotation + 1) % 4)
+                    }
+                    .font(.system(size: 32))
+                    .frame(maxWidth: .infinity, minHeight: 65)
+                    .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12))
                 }
             }
-            Text(message).foregroundStyle(Theme.muted)
-            Button("New target") { target = Int.random(in:1...9); message = "Find the new target." }.buttonStyle(PrimaryStyle())
-        }
+            if !message.isEmpty { Text(message).foregroundStyle(Theme.muted) }
+            Spacer()
+            Button("Finish session") { finishSession() }.foregroundStyle(Theme.muted).frame(maxWidth: .infinity)
+        }.padding(22)
     }
-    private var imagery: some View {
-        VStack(alignment:.leading,spacing:17) {
-            Text(module.id == "spatial" ? "Imagine the cube rotating in 3D. Predict its shape from another viewpoint." : "Imagine a familiar place. Explore it from another viewpoint and recall details without looking at a picture.").foregroundStyle(Theme.muted)
-            ZStack {
-                RoundedRectangle(cornerRadius:24).fill(Theme.panel).frame(height:205)
-                Circle().stroke(Theme.violet.opacity(0.25),lineWidth:1).frame(width:150,height:150)
-                RoundedRectangle(cornerRadius:17).fill(LinearGradient(colors:[Theme.violet,Theme.cyan.opacity(0.7)],startPoint:.topLeading,endPoint:.bottomTrailing)).frame(width:86,height:86).rotation3DEffect(.degrees(Double(phase*30)),axis:(x:1,y:1,z:0.3)).shadow(color:Theme.violet.opacity(0.35),radius:20)
+
+    private var reasoningView: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            header
+            Text(module.id == "pattern" ? "Pattern recognition" : "Mental calculation")
+                .font(.title2.weight(.semibold))
+            Text(questions[questionIndex % questions.count].0)
+                .font(.system(size: 25, weight: .medium))
+                .padding(.vertical, 20)
+            TextField("Answer", text: $input)
+                .keyboardType(.numberPad)
+                .font(.title2.monospacedDigit())
+                .padding(15).background(Theme.panel, in: RoundedRectangle(cornerRadius: 12))
+            if !message.isEmpty { Text(message).foregroundStyle(Theme.muted) }
+            Button("Check answer") {
+                let right = input.trimmingCharacters(in: .whitespacesAndNewlines) == questions[questionIndex % questions.count].1
+                record(right)
+            }.buttonStyle(PrimaryStyle())
+            if completed > 0 {
+                Button(completed >= 5 ? "View results" : "Next question") {
+                    if completed >= 5 { finishSession() }
+                    else { questionIndex += 1; round = completed + 1; input = ""; message = "" }
+                }.buttonStyle(PrimaryStyle())
             }
-            Button("Rotate reference object") { withAnimation(.spring()) { phase += 1 } }.buttonStyle(PrimaryStyle())
-            Text("Rate vividness and control").font(.headline)
-            HStack { ForEach(1...5,id:\.self) { n in Button("\(n)") { rating = n }.frame(maxWidth:.infinity,minHeight:48).background(rating == n ? Theme.violet.opacity(0.35):Theme.panel,in:RoundedRectangle(cornerRadius:12)) } }
-            Text("1 = faint or unstable · 5 = vivid and controllable").font(.caption).foregroundStyle(Theme.muted)
-            Button("Complete exercise") { finish(score:rating*20) }.buttonStyle(PrimaryStyle())
+            Spacer()
+            Button("Finish session") { finishSession() }.foregroundStyle(Theme.muted).frame(maxWidth: .infinity)
+        }.padding(22)
+    }
+
+    private var resultView: some View {
+        VStack(spacing: 18) {
+            Spacer()
+            Text("SESSION COMPLETE").font(.caption.monospaced()).tracking(2).foregroundStyle(Theme.muted)
+            Text("\\(score)%").font(.system(size: 64, weight: .medium, design: .rounded).monospacedDigit())
+            Text("\\(correctCount) correct out of \\(max(completed, 1))").foregroundStyle(Theme.muted)
+            Button("Done") { dismiss() }.buttonStyle(PrimaryStyle())
+            Spacer()
+        }.padding(26)
+    }
+
+    private func resetRound() {
+        message = ""
+        if module.id == "memory" {
+            sequence = (0..<4).map { _ in Int.random(in: 1...9) }
+            sequenceHidden = false
+            answer = []
+        } else if isSearch {
+            target = Int.random(in: 1...9)
+            grid = Array(1...9).shuffled()
+        } else if module.id == "spatial" {
+            shapeRotation = Int.random(in: 0...3)
+            spatialChoice = nil
         }
     }
-    private var reasoning: some View {
-        VStack(alignment:.leading,spacing:17) {
-            Text("Accuracy first; speed comes later.").foregroundStyle(Theme.muted)
-            Text(module.id == "pattern" ? "What comes next?  2, 4, 8, 16, ?" : "Calculate:  17 + 28").font(.title3.bold()).padding(22).frame(maxWidth:.infinity,alignment:.leading).background(Theme.panel,in:RoundedRectangle(cornerRadius:18))
-            TextField("Your answer",text:$input).keyboardType(.numberPad).padding(15).background(Theme.panel,in:RoundedRectangle(cornerRadius:14))
-            Button("Check answer") { finish(score:input.trimmingCharacters(in:.whitespaces) == (module.id == "pattern" ? "32":"45") ? 100:0) }.buttonStyle(PrimaryStyle())
+
+    private func record(_ correct: Bool) {
+        completed += 1
+        if correct { correctCount += 1 }
+        score = Int((Double(correctCount) / Double(max(completed, 1)) * 100).rounded())
+        message = correct ? "Correct." : "Not quite."
+        if module.id == "memory" {
+            if completed >= 5 { message = "Five rounds complete. Finish the session when ready." }
+            else { round = completed + 1; sequence = (0..<4).map { _ in Int.random(in: 1...9) }; sequenceHidden = false; answer = [] }
+        } else if module.id == "spatial" {
+            if completed < 10 { round = completed + 1; resetRound() }
+            else { message = "Ten rounds complete. Finish the session when ready." }
         }
     }
-    private func finish(score:Int) {
+
+    private func finishSession() {
         guard !finished else { return }
-        self.score = score; finished = true
-        progress.add(module,score:score,seconds:max(1,Int(Date().timeIntervalSince(start))))
+        if module.id == "visual" && completed == 0 { completed = 1; correctCount = rating > 0 ? 1 : 0; score = rating * 20 }
+        finished = true
+        progress.add(module, score: score, seconds: max(1, Int(Date().timeIntervalSince(startedAt))))
     }
 }
+
 private struct ReflexTestView: View {
     @ObservedObject var progress: Progress
     @Environment(\.dismiss) private var dismiss
