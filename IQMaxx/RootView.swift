@@ -218,7 +218,7 @@ struct ExerciseView: View {
                         ForEach(1...9,id:\.self) { n in Button("\(n)") { if answer.count < sequence.count { answer.append(n) } }.font(.title2.bold()).frame(maxWidth:.infinity,minHeight:56).background(Theme.panel,in:RoundedRectangle(cornerRadius:13)) }
                     }
                     Text("Your answer: "+answer.map(String.init).joined(separator:" · ")).foregroundStyle(Theme.muted)
-                    Button("Check answer") { let correct = answer == sequence; finish(score:correct ? 100 : Int(Double(zip(answer,sequence).filter{$0 == $1}.count)/Double(sequence.count)*100)) }.buttonStyle(PrimaryStyle()).disabled(answer.count != sequence.count)
+                    Button("Check answer") { let correct = answer == sequence; finish(score:correct ? 100 : Int(Double(zip(answer,sequence).filter { pair in pair.0 == pair.1 }.count)/Double(sequence.count)*100)) }.buttonStyle(PrimaryStyle()).disabled(answer.count != sequence.count)
                 }
             }
         }
