@@ -275,7 +275,7 @@ struct ExerciseView: View {
 }
 private struct ReflexTestView: View {
     @ObservedObject var progress: Progress
-    @Environment(\\.dismiss) private var dismiss
+    @Environment(\.dismiss) private var dismiss
     @State private var state = "intro"
     @State private var signalTime: UInt64 = 0
     @State private var reactionTimes: [Double] = []
@@ -329,9 +329,9 @@ private struct ReflexTestView: View {
             } else if state == "result" {
                 VStack(spacing: 18) {
                     Spacer()
-                    Text("\\(resultMs ?? 0)").font(.system(size: 76, weight: .medium, design: .rounded).monospacedDigit())
+                    Text("\(resultMs ?? 0)").font(.system(size: 76, weight: .medium, design: .rounded).monospacedDigit())
                     Text("milliseconds").font(.system(size: 16)).foregroundStyle(.secondary)
-                    Text(reactionTimes.count < 5 ? "Round \\(reactionTimes.count) of 5 complete" : "Test complete")
+                    Text(reactionTimes.count < 5 ? "Round \(reactionTimes.count) of 5 complete" : "Test complete")
                         .font(.system(size: 15)).foregroundStyle(.secondary)
                     Spacer()
                     Button(reactionTimes.count < 5 ? "Next round" : "View results") {
@@ -359,11 +359,11 @@ private struct ReflexTestView: View {
                 VStack(spacing: 18) {
                     Spacer()
                     Text("RESULT").font(.system(size: 13, weight: .semibold, design: .monospaced)).tracking(3).foregroundStyle(.secondary)
-                    Text("\\(average) ms").font(.system(size: 60, weight: .medium, design: .rounded).monospacedDigit())
+                    Text("\(average) ms").font(.system(size: 60, weight: .medium, design: .rounded).monospacedDigit())
                     Text("Average reaction time").foregroundStyle(.secondary)
                     HStack(spacing: 32) {
-                        VStack(spacing: 5) { Text("\\(best) ms").font(.title2.monospacedDigit()); Text("Best").font(.caption).foregroundStyle(.secondary) }
-                        VStack(spacing: 5) { Text("\\(falseStarts)").font(.title2.monospacedDigit()); Text("False starts").font(.caption).foregroundStyle(.secondary) }
+                        VStack(spacing: 5) { Text("\(best) ms").font(.title2.monospacedDigit()); Text("Best").font(.caption).foregroundStyle(.secondary) }
+                        VStack(spacing: 5) { Text("\(falseStarts)").font(.title2.monospacedDigit()); Text("False starts").font(.caption).foregroundStyle(.secondary) }
                     }.padding(.top, 8)
                     Spacer()
                     Button("Test again") {
