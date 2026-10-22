@@ -7,13 +7,18 @@ permissions:
   contents: read
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate project
         run: xcodegen generate
+      - name: Normalize project format for runner Xcode
+        run: |
+          sed -i '' 's/objectVersion = 77;/objectVersion = 60;/' IQMaxx.xcodeproj/project.pbxproj
+          sed -i '' 's/compatibilityVersion = "Xcode 16.0";/compatibilityVersion = "Xcode 14.0";/' IQMaxx.xcodeproj/project.pbxproj
+          grep -E 'objectVersion|compatibilityVersion' IQMaxx.xcodeproj/project.pbxproj | head -5
       - name: Show Xcode version
         run: xcodebuild -version
       - name: Build simulator app
