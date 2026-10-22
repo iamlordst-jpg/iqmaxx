@@ -325,7 +325,7 @@ struct ExerciseView: View {
                 }
                 Button("Check answer") {
                     record(answer == sequence)
-                }.buttonStyle(PrimaryStyle()).disabled(answer.count != sequence.count)
+                }.buttonStyle(PrimaryStyle()).disabled(answer.count != sequence.count || completed >= 5)
             }
             Spacer(minLength: 8)
             if !message.isEmpty { Text(message).font(.subheadline).foregroundStyle(Theme.muted) }
@@ -418,9 +418,11 @@ struct ExerciseView: View {
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                 ForEach(0..<4, id: \.self) { choice in
                     Button(["↑", "→", "↓", "←"][choice]) {
+                        guard completed < 10 else { return }
                         spatialChoice = choice
                         record(choice == (shapeRotation + 1) % 4)
                     }
+                    .disabled(completed >= 10)
                     .font(.system(size: 32))
                     .frame(maxWidth: .infinity, minHeight: 65)
                     .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12))
@@ -444,11 +446,12 @@ struct ExerciseView: View {
                 .keyboardType(.numberPad)
                 .font(.title2.monospacedDigit())
                 .padding(15).background(Theme.panel, in: RoundedRectangle(cornerRadius: 12))
+                .disabled(completed >= 5)
             if !message.isEmpty { Text(message).foregroundStyle(Theme.muted) }
             Button("Check answer") {
                 let right = input.trimmingCharacters(in: .whitespacesAndNewlines) == questions[questionIndex % questions.count].1
                 record(right)
-            }.buttonStyle(PrimaryStyle())
+            }.buttonStyle(PrimaryStyle()).disabled(completed >= 5)
             if completed > 0 {
                 Button(completed >= 5 ? "View results" : "Next question") {
                     if completed >= 5 { finishSession() }
@@ -465,7 +468,11 @@ struct ExerciseView: View {
             Spacer()
             Text("SESSION COMPLETE").font(.caption.monospaced()).tracking(2).foregroundStyle(Theme.muted)
             Text("\(score)%").font(.system(size: 64, weight: .medium, design: .rounded).monospacedDigit())
-            Text("\(correctCount) correct out of \(max(completed, 1))").foregroundStyle(Theme.muted)
+            if module.id == "visual" {
+                Text("Self-rating saved").foregroundStyle(Theme.muted)
+            } else {
+                Text("\(correctCount) correct out of \(max(completed, 1))").foregroundStyle(Theme.muted)
+            }
             Button("Done") { dismiss() }.buttonStyle(PrimaryStyle())
             Spacer()
         }.padding(26)
@@ -644,6 +651,7 @@ private struct ReflexTestView: View {
     }
 
     private func startTrial() {
+        touchActive = false
         trialToken = UUID()
         let token = trialToken
         state = "waiting"
